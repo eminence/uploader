@@ -1,0 +1,23 @@
+name = "uploader"
+main = "src/index.ts"
+compatibility_date = "2022-11-19"
+
+routes = [
+	{ pattern = "up.em32.site", custom_domain = true }
+]
+
+
+kv_namespaces = [
+    # { binding = "kv_upload", id = "089185f3a9734a4fa985190b92b7864d", preview_id = "2aefd92be319424db32ac8a9db61d4d6" }
+    { binding = "kv_upload", id = "089185f3a9734a4fa985190b92b7864d", preview_id = "089185f3a9734a4fa985190b92b7864d" }
+]
+
+[[r2_buckets]]
+binding = "r2_uploads"
+bucket_name = "uploads"
+preview_bucket_name = "uploads"
+
+[[d1_databases]]
+binding = "DB" # i.e. available in your Worker on env.DB
+database_name = "uploads"
+database_id = "57f163db-2add-4d7a-86a3-c95c832da380"

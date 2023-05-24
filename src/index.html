@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="icon" href="https://up.em32.site/sjg5RY04jB-5ZYP2N+ga7w==" />
+    <style>
+        body {
+            font-family: monospace;
+            font-size: larger;
+        }
+
+        button {
+            font-family: monospace;
+        }
+
+        div#dropzone {
+            background-color: lightblue;
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        div#dropzone * {
+            margin: 3px;
+            padding: 3px;
+        }
+
+        div#dropzone input[type=file] {
+            display: none;
+        }
+    </style>
+    <script type="text/javascript">
+        function process_event(dataTransfer) {
+            for (const item of dataTransfer.items) {
+                console.log(item, item.kind, item.type);
+                if (item.kind === "string" && item.type != "vscode-editor-data") {
+                    upload(dataTransfer.getData(item.type), item.type);
+                }
+            }
+            for (const item of dataTransfer.files) {
+                console.log(item)
+                if (item.type.startsWith("image/") || item.type.startsWith("video/")) {
+                    upload(item.arrayBuffer(), item.type);
+                }
+            }
+        }
+
+        function selectfile(event) {
+            document.getElementById("file").click()
+        }
+
+        function handleFiles(event) {
+            for (const file of document.getElementById("file").files) {
+                upload(file.arrayBuffer(), file.type);
+            }
+        }
+
+        function contentTypeAllowed(contentType) {
+            return true;
+            return contentType.startsWith("audio/") ||
+                contentType.startsWith("video/") ||
+                contentType.startsWith("image/") ||
+                contentType.startsWith("text/");
+        }
+
+        function allowDrop(allowdropevent) {
+            allowdropevent.preventDefault();
+            console.log(allowdropevent)
+
+            document.getElementById("dropzone").style.backgroundColor = "lightgreen";
+            for (const item of allowdropevent.dataTransfer.items) {
+                console.log("items", item, item.kind, item.type);
+                if (item.type.length > 0 && !item.type.startsWith("image/") && !item.type.startsWith("video/")) {
+                    document.querySelector("#dropzone span#msg").innerText = item.type + " not supported"
+                    document.getElementById("dropzone").style.backgroundColor = "lightcoral";
+                    break;
+                }
+            }
+            for (const item of allowdropevent.dataTransfer.files) {
+                console.log("files", item)
+            }
+        }
+
+        function leavedrag(event) {
+            document.getElementById("dropzone").style.backgroundColor = "lightblue";
+            document.querySelector("#dropzone span#msg").innerText = "";
+        }
+
+        function drop(dropevent) {
+            dropevent.preventDefault();
+            document.getElementById("dropzone").style.backgroundColor = "lightblue";
+            document.querySelector("#dropzone span#msg").innerText = "";
+            process_event(dropevent.dataTransfer);
+        }
+
+        async function upload(data, contentType) {
+            const elem = document.getElementById("results");
+            const li = document.createElement("li");
+            elem.appendChild(li);
+            li.innerHTML = "Uploading............... " + contentType;
+
+            const resp = await fetch("/", {
+                "method": "POST",
+                "body": await data,
+                "headers": {
+                    "Content-Type": contentType
+                }
+            });
+            const result = new URL(await resp.text());
+            console.log(result);
+
+            const link = document.createElement("a");
+            link.href = result.pathname;
+            link.innerText = result.pathname.substring(1) + " " + contentType;
+            link.target = "_blank";
+            li.innerHTML = "";
+            li.appendChild(link);
+        }
+
+        document.addEventListener("paste", (event) => {
+            event.preventDefault();
+            console.log(event);
+            process_event(event.clipboardData);
+        });
+    </script>
+</head>
+
+<body>
+    <div id="dropzone" ondrop="drop(event)" ondragover="allowDrop(event);" ondragleave="leavedrag(event)"
+        ondragend="leavedrag(event)">
+        <span>Paste data or drop here or <button onclick="selectfile(event)">click here</button></span>
+        <input type="file" id="file" onchange="handleFiles(event)" multiple />
+        <span id="msg"></span>
+        <ul id="results"></ul>
+    </div>
+</body>
+
+</html>
