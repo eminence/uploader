@@ -174,29 +174,40 @@ export interface Env {
 	ADMIN_PASSWORD: string;
 }
 
-const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-';
+const base58_encode = (arraybuffer: ArrayBuffer): string => {
+	// Copyright (c) 2021 pur3miish
+	// https://github.com/pur3miish/base58-js
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-const encode = (arraybuffer: ArrayBuffer): string => {
-	let bytes = new Uint8Array(arraybuffer),
-		i,
-		len = bytes.length,
-		base64 = '';
+	const base58Map = Array(256).fill(-1);
+	for (let i = 0; i < alphabet.length; ++i)
+		base58Map[alphabet.charCodeAt(i)] = i;
 
-	for (i = 0; i < len; i += 3) {
-		base64 += chars[bytes[i] >> 2];
-		base64 += chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
-		base64 += chars[((bytes[i + 1] & 15) << 2) | (bytes[i + 2] >> 6)];
-		base64 += chars[bytes[i + 2] & 63];
+	let bytes = new Uint8Array(arraybuffer);
+
+	const result = [];
+
+	for (const byte of bytes) {
+		let carry = byte;
+		for (let j = 0; j < result.length; ++j) {
+			const x: any = (base58Map[result[j]] << 8) + carry;
+			result[j] = alphabet.charCodeAt(x % 58);
+			carry = (x / 58) | 0;
+		}
+		while (carry) {
+			result.push(alphabet.charCodeAt(carry % 58));
+			carry = (carry / 58) | 0;
+		}
 	}
 
-	if (len % 3 === 2) {
-		base64 = base64.substring(0, base64.length - 1) + '=';
-	} else if (len % 3 === 1) {
-		base64 = base64.substring(0, base64.length - 2) + '==';
-	}
+	for (const byte of bytes)
+		if (byte) break;
+		else result.push("1".charCodeAt(0));
 
-	return base64;
-};
+	result.reverse();
+
+	return String.fromCharCode(...result);
+}
 
 interface KVMetadata {
 	/* if true, the data is a blob in KV and can be served directly from KV */
@@ -248,11 +259,9 @@ const calc_expiration_secsfromnow = (file_size: number): number => {
 }
 
 const save_stream = async (env: Env, value: ReadableStream, length: number, contentType?: string, contentLength?: number, cf?: any): Promise<string> => {
-	const digestStream = new crypto.DigestStream("MD5");
+	const digestStream = new crypto.DigestStream("SHA-256");
 	const tee = value.tee();
 	const uuid = crypto.randomUUID();
-
-
 
 	tee[0].pipeTo(digestStream);
 
@@ -284,20 +293,39 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 	const hexString = [...new Uint8Array(calculated_digest)]
 		.map(b => b.toString(16).padStart(2, '0'))
 		.join('');
-	const encoded = encode(calculated_digest);
+	const encoded = base58_encode(calculated_digest);
 	console.log("calculated digest", hexString, encoded, uuid);
 
 	const now = Date.now().valueOf();
 	const expires_sec = calc_expiration_secsfromnow(length);
-	try {
-		const stmt = await env.DB.prepare('INSERT OR REPLACE INTO aliases (alias, uuid, blob, created, expires, cf) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-			.bind(encoded, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf)).run();
-	} catch (e) {
-		console.log("error inserting alias", e);
 
+	// find the shortest prefix of `encoded` that's not already in our alias database
+	let db_error;
+	for (let i = 4; i <= encoded.length; i++) {
+		const prefix = encoded.substring(0, i);
+		// try to insert the prefix, and if it fails, retry with a longer prefix
+		try {
+			const stmt = await env.DB.prepare('INSERT OR FAIL INTO aliases (alias, uuid, blob, created, expires, cf) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf)).run();
+			return prefix;
+		} catch (e) {
+			console.log("error inserting alias", prefix, "trying again with a longer prefix", e);
+			db_error = e;
+		}
 	}
 
-	return encoded;
+	// we couldn't insert, so throw our most recent error
+	throw db_error;
+
+
+	// try {
+	// 	const stmt = await env.DB.prepare('INSERT OR REPLACE INTO aliases (alias, uuid, blob, created, expires, cf) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+	// 		.bind(encoded, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf)).run();
+	// } catch (e) {
+	// 	console.log("error inserting alias", e);
+	// }
+
+	// return encoded;
 };
 
 export default {
