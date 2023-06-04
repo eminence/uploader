@@ -9,6 +9,7 @@
  */
 
 // import * as mime from "mime-types";
+import { slowTee } from "../slow-tee/src";
 import index_data from "./index.html";
 import list_data from "./list.html";
 
@@ -116,16 +117,17 @@ const calc_expiration_secsfromnow = (file_size: number): number => {
 
 const save_stream = async (env: Env, value: ReadableStream, length: number, contentType?: string, contentLength?: number, cf?: any): Promise<string> => {
 	const digestStream = new crypto.DigestStream("SHA-256");
-	const tee = value.tee();
 	const uuid = crypto.randomUUID();
 
-	tee[0].pipeTo(digestStream);
+	const tee = slowTee(value, ["hasher", "uploader"]);
+
+	tee["hasher"].pipeTo(digestStream);
 
 	let stored_in_kv: boolean;
 
 	// if small enough, store directly in KV
 	if (length < 20 * 1024 * 1024) {
-		await env.kv_upload.put(uuid, tee[1], {
+		await env.kv_upload.put(uuid, tee["uploader"], {
 			expirationTtl: calc_expiration_secsfromnow(length),
 			metadata: {
 				"blob": true,
@@ -136,7 +138,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		stored_in_kv = true;
 	} else {
 		// upload to R2
-		const put_obj = await env.r2_uploads.put(uuid, tee[1], {
+		const put_obj = await env.r2_uploads.put(uuid, tee["uploader"], {
 			// md5: hash,
 			httpMetadata: {
 				contentType: contentType,
