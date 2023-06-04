@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="icon" href="https://up.em32.site/sjg5RY04jB-5ZYP2N+ga7w==" />
+    <style>
+        body {
+            font-family: monospace;
+            font-size: larger;
+        }
+
+        #expired {
+            color: red;
+        }
+    </style>
+    <script type="text/javascript">
+        let offset = 0;
+
+        async function load_data() {
+            const now = new Date();
+
+            const table = document.getElementById("table");
+
+            const limit = 25;
+
+            const resp = await fetch(`/_/list.json?limit=${limit}&offset=${offset}`);
+            const data = await resp.json();
+
+
+            for (const elem of data) {
+                console.log(elem);
+                const tr = table.appendChild(document.createElement("tr"));
+
+                let td = tr.appendChild(document.createElement("td"));
+                let a = td.appendChild(document.createElement("a"));
+                a.href = "/" + elem.alias;
+                a.innerText = elem.alias;
+
+                td = tr.appendChild(document.createElement("td"));
+                td.append(elem.expires);
+                if (new Date(elem.created_ts) > now) {
+                    td.classList.add("expired");
+                }
+
+                td = tr.appendChild(document.createElement("td"));
+                td.append(elem.cf.city + ", " + elem.cf.country);
+
+                tr.appendChild(document.createElement("td")).append(elem.blob);
+                if (elem.blob === "kv" && elem.kv_metadata) {
+                    td = tr.appendChild(document.createElement("td"));
+                    td.append(elem.kv_metadata.metadata["content-type"] + " -- " + elem.kv_metadata.metadata["content-length"] + " bytes");
+
+                } else if (elem.blob == "r2") {
+                    td = tr.appendChild(document.createElement("td"));
+                    td.append(elem.r2_metadata.size + " bytes");
+                }
+            }
+            offset += limit;
+
+        }
+    </script>
+</head>
+
+<body>
+
+    <table id="table"></table>
+    <button onclick="load_data()">Load more</button>
+
+    <script type="module">
+        load_data();
+
+    </script>
+</body>
+
+</html>

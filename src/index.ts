@@ -9,152 +9,8 @@
  */
 
 // import * as mime from "mime-types";
-// import index_data from "./index.html";
-const index_data = `<!DOCTYPE html>
-<html>
-
-<head>
-    <link rel="icon" href="https://up.em32.site/sjg5RY04jB-5ZYP2N+ga7w==" />
-    <style>
-        body {
-            font-family: monospace;
-            font-size: larger;
-        }
-
-        button {
-            font-family: monospace;
-        }
-
-        div#dropzone {
-            background-color: lightblue;
-            position: fixed;
-            left: 20px;
-            top: 20px;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-
-        div#dropzone * {
-            margin: 3px;
-            padding: 3px;
-        }
-
-        div#dropzone input[type=file] {
-            display: none;
-        }
-    </style>
-    <script type="text/javascript">
-        function process_event(dataTransfer) {
-            for (const item of dataTransfer.items) {
-                console.log(item, item.kind, item.type);
-                if (item.kind === "string" && item.type != "vscode-editor-data") {
-                    upload(dataTransfer.getData(item.type), item.type);
-                }
-            }
-            for (const item of dataTransfer.files) {
-                console.log(item)
-                if (item.type.startsWith("image/") || item.type.startsWith("video/")) {
-                    upload(item.arrayBuffer(), item.type);
-                }
-            }
-        }
-
-        function selectfile(event) {
-            document.getElementById("file").click()
-        }
-
-        function handleFiles(event) {
-            for (const file of document.getElementById("file").files) {
-                upload(file.arrayBuffer(), file.type);
-            }
-        }
-
-        function contentTypeAllowed(contentType) {
-            return true;
-            return contentType.startsWith("audio/") ||
-                contentType.startsWith("video/") ||
-                contentType.startsWith("image/") ||
-                contentType.startsWith("text/");
-        }
-
-        function allowDrop(allowdropevent) {
-            allowdropevent.preventDefault();
-            console.log(allowdropevent)
-
-            document.getElementById("dropzone").style.backgroundColor = "lightgreen";
-            for (const item of allowdropevent.dataTransfer.items) {
-                console.log("items", item, item.kind, item.type);
-                if (item.type.length > 0 && !item.type.startsWith("image/") && !item.type.startsWith("video/")) {
-                    document.querySelector("#dropzone span#msg").innerText = item.type + " not supported"
-                    document.getElementById("dropzone").style.backgroundColor = "lightcoral";
-                    break;
-                }
-            }
-            for (const item of allowdropevent.dataTransfer.files) {
-                console.log("files", item)
-            }
-        }
-
-        function leavedrag(event) {
-            document.getElementById("dropzone").style.backgroundColor = "lightblue";
-            document.querySelector("#dropzone span#msg").innerText = "";
-        }
-
-        function drop(dropevent) {
-            dropevent.preventDefault();
-            document.getElementById("dropzone").style.backgroundColor = "lightblue";
-            document.querySelector("#dropzone span#msg").innerText = "";
-            process_event(dropevent.dataTransfer);
-        }
-
-        async function upload(data, contentType) {
-            const elem = document.getElementById("results");
-            const li = document.createElement("li");
-            elem.appendChild(li);
-            li.innerHTML = "Uploading............... " + contentType;
-
-            const resp = await fetch("/", {
-                "method": "POST",
-                "body": await data,
-                "headers": {
-                    "Content-Type": contentType
-                }
-            });
-            const result = new URL(await resp.text());
-            console.log(result);
-
-            const link = document.createElement("a");
-            link.href = result.pathname;
-            link.innerText = result.pathname.substring(1) + " " + contentType;
-            link.target = "_blank";
-            li.innerHTML = "";
-            li.appendChild(link);
-        }
-
-        document.addEventListener("paste", (event) => {
-            event.preventDefault();
-            console.log(event);
-            process_event(event.clipboardData);
-        });
-    </script>
-</head>
-
-<body>
-    <div id="dropzone" ondrop="drop(event)" ondragover="allowDrop(event);" ondragleave="leavedrag(event)"
-        ondragend="leavedrag(event)">
-        <span>Paste data or drop here or <button onclick="selectfile(event)">click here</button></span>
-        <input type="file" id="file" onchange="handleFiles(event)" multiple />
-        <span id="msg"></span>
-        <ul id="results"></ul>
-    </div>
-</body>
-
-</html>
-`;
+import index_data from "./index.html";
+import list_data from "./list.html";
 
 export interface Env {
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
@@ -379,7 +235,7 @@ export default {
 			}
 
 		} else if (request.method == "GET") {
-			if (url.pathname === "/_/list" || url.pathname === "/_/delete") {
+			if (url.pathname.startsWith("/_/")) {
 				if (cf && (cf as any).metroCode === "521" && headers.get("Authorization") === "Basic " + env.ADMIN_PASSWORD) {
 					console.log("login ok from", JSON.stringify(cf));
 				} else {
@@ -390,11 +246,30 @@ export default {
 						}
 					})
 				}
-
-
-
 				if (url.pathname == "/_/list") {
-					const stmt = await env.DB.prepare('SELECT alias, uuid, blob, created, expires, cf FROM aliases order by created desc limit 10').run();
+					return new Response(list_data, {
+						headers: {
+							"content-type": "text/html; charset=utf-8",
+						}
+					});
+				}
+
+				if (url.pathname == "/_/list.json") {
+					const limit = url.searchParams.get("limit") || "10";
+					// make sure limit is an int, between 1 and 100
+					const limit_int = parseInt(limit);
+					if (limit_int < 1 || limit_int > 100) {
+						return new Response("go away", { status: 400 });
+					}
+
+					const offset = url.searchParams.get("offset") || "0";
+					// offset must be not negative
+					const offset_int = parseInt(offset);
+					if (offset_int < 0) {
+						return new Response("go away", { status: 400 });
+					}
+
+					const stmt = await env.DB.prepare(`SELECT alias, uuid, blob, created, expires, cf FROM aliases order by created desc limit ${limit} offset ${offset}`).run();
 					if (stmt.success && stmt.results) {
 						const to_return = [] as any[];
 						for (const result of stmt.results as AliasDbRow[]) {
@@ -403,7 +278,9 @@ export default {
 								uuid: result.uuid,
 								blob: result.blob,
 								created: new Date(result.created).toISOString(),
+								created_ts: result.created,
 								expires: new Date(result.expires).toISOString(),
+								expires_ts: result.expires,
 								cf: JSON.parse(result.cf),
 							} as any;
 							if (result.blob == "kv") {
@@ -415,6 +292,13 @@ export default {
 									};
 								}
 
+							} else if (result.blob == "r2") {
+								const r2_data = await env.r2_uploads.list({
+									prefix: result.uuid,
+									limit: 1,
+								});
+								// console.log(JSON.stringify(r2_data));
+								o['r2_metadata'] = r2_data.objects[0];
 							}
 							to_return.push(o);
 						}
@@ -430,7 +314,7 @@ export default {
 					for (const key of list.keys) {
 						const stmt = await env.DB.prepare('SELECT * FROM aliases WHERE alias = ?1').bind(key.name).run();
 						if (stmt.success && stmt.results && stmt.results.length == 0) {
-							console.log("deleting", key.name, key.metadata, key.expiration);
+							console.log("deleting", key.name, key.metadata, new Date(key.expiration as number * 1000));
 							return new Response(key.name, { status: 400 });
 							// await env.kv_upload.delete(key.name);
 						} else {
