@@ -1,0 +1,36 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cargo",
+			"command": "build",
+			"args": [
+				"--release",
+				"--target",
+				"wasm32-unknown-unknown"
+			],
+			"problemMatcher": [
+				"$rustc",
+				"$rust-panic"
+			],
+			"group": "build",
+			"label": "rust: cargo build"
+		},
+		{
+			"type": "process",
+			"command": "wasm-bindgen",
+			"args": [
+				"--target",
+				"web",
+				"--out-dir",
+				"..\\src\\infer",
+				"target\\wasm32-unknown-unknown\\release\\infer_wasm.wasm"
+			],
+			"label": "wasm-bindgen",
+			"dependsOn": [
+				"rust: cargo build"
+			],
+			"problemMatcher": []
+		}
+	]
+}

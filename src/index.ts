@@ -13,6 +13,10 @@ import { slowTee } from "../slow-tee/src";
 import index_data from "./index.html";
 import list_data from "./list.html";
 
+import { initSync, add, infer } from "./infer/infer_wasm";
+import wasm_mod from "./infer/infer_wasm_bg.wasm";
+
+
 export interface Env {
 	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
 	// MY_KV_NAMESPACE: KVNamespace;
@@ -29,6 +33,8 @@ export interface Env {
 
 	// secrets
 	ADMIN_PASSWORD: string;
+
+	LOCAL_DEV?: string;
 }
 
 const base58_encode = (arraybuffer: ArrayBuffer): string => {
@@ -115,11 +121,27 @@ const calc_expiration_secsfromnow = (file_size: number): number => {
 	return ttl_in_days * 86400;
 }
 
-const save_stream = async (env: Env, value: ReadableStream, length: number, contentType?: string, contentLength?: number, cf?: any): Promise<string> => {
+const save_stream = async (env: Env, value: ReadableStream, length: number, contentType?: string, contentLength?: number, cf?: any): Promise<{ encoded: string, contentType?: string }> => {
 	const digestStream = new crypto.DigestStream("SHA-256");
 	const uuid = crypto.randomUUID();
 
-	const tee = slowTee(value, ["hasher", "uploader"]);
+
+	let tee;
+	if (contentType === null || contentType === "") {
+		// try to guess the type
+		tee = slowTee(value, ["hasher", "uploader", "guesser"]);
+		initSync(wasm_mod);
+		const rc = await infer(tee["guesser"]);
+		if (rc != null) {
+			contentType = rc;
+			console.log("Detected content type:", contentType);
+		} else {
+			console.log("Failed to detect content type, using application/octet-stream");
+			contentType = "application/octet-stream";
+		}
+	} else {
+		tee = slowTee(value, ["hasher", "uploader",]);
+	}
 
 	tee["hasher"].pipeTo(digestStream);
 
@@ -165,7 +187,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		try {
 			const stmt = await env.DB.prepare('INSERT OR FAIL INTO aliases (alias, uuid, blob, created, expires, cf) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
 				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf)).run();
-			return prefix;
+			return { encoded: prefix, contentType: contentType };
 		} catch (e) {
 			console.log("error inserting alias", prefix, "trying again with a longer prefix", e);
 			db_error = e;
@@ -205,10 +227,6 @@ export default {
 			// 	return new Response("go away", { status: 400 });
 			// }
 
-			if (contentType === "") {
-				console.log("Incoming request is missing content-type header");
-				return new Response("go away", { status: 400 });
-			}
 			if (contentLengthStr === null) {
 				console.log("Incoming request is missing content-length header");
 				return new Response("go away", { status: 400 });
@@ -229,14 +247,51 @@ export default {
 					return new Response("go away", { status: 400 });
 				}
 
-				const encoded = await save_stream(env, file.stream(), file.size, undefined, file.size, request.cf);
-				return new Response(`https://up.em32.site/${encoded}`);
+				const { encoded, contentType } = await save_stream(env, file.stream(), file.size, undefined, file.size, request.cf);
+				if (url.searchParams.get("resp") === "json") {
+					return new Response(JSON.stringify({ encoded: `https://up.em32.site/${encoded}`, contentType }), {
+						headers: {
+							"content-type": "application/json;charset=UTF-8",
+						}
+					});
+				} else {
+					return new Response(`https://up.em32.site/${encoded}`);
+				}
 			} else {
-				const encoded = await save_stream(env, request.body, contentLength, contentType, contentLength, request.cf);
-				return new Response(`https://up.em32.site/${encoded}`);
+				try {
+					const { encoded, contentType: detectedType } = await save_stream(env, request.body, contentLength, contentType, contentLength, request.cf);
+					if (url.searchParams.get("resp") === "json") {
+						return new Response(JSON.stringify({
+							encoded: `https://up.em32.site/${encoded}`,
+							contentType: detectedType
+						}), {
+							headers: {
+								"content-type": "application/json;charset=UTF-8",
+							}
+						});
+					} else {
+						return new Response(`https://up.em32.site/${encoded}`);
+					}
+				} catch (e) {
+					console.log(e);
+				}
 			}
 
 		} else if (request.method == "GET") {
+			if (url.pathname === "/wasm") {
+				initSync(wasm_mod);
+				const rc = add(4, 8);
+				console.log(rc);
+				return new Response("go away", { status: 400 });
+			}
+			if (url.pathname === "/favicon.ico") {
+				const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>("cecd07db-d608-49da-88a7-a88773a64930", { type: "stream" });
+				if (value === null) {
+					return new Response("not found in kv", { status: 404 });
+				}
+				return stream_kv_blob(value, metadata);
+
+			}
 			if (url.pathname.startsWith("/_/")) {
 				if (cf && (cf as any).metroCode === "521" && headers.get("Authorization") === "Basic " + env.ADMIN_PASSWORD) {
 					console.log("login ok from", JSON.stringify(cf));

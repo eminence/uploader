@@ -37,6 +37,9 @@
                 a.innerText = elem.alias;
 
                 td = tr.appendChild(document.createElement("td"));
+                td.append(elem.uuid);
+
+                td = tr.appendChild(document.createElement("td"));
                 td.append(elem.expires);
                 if (new Date(elem.created_ts) > now) {
                     td.classList.add("expired");

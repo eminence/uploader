@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <link rel="icon" href="https://up.em32.site/sjg5RY04jB-5ZYP2N+ga7w==" />
+    <link rel="icon" href="https://up.em32.site/9HvQ" />
     <style>
         body {
             font-family: monospace;
@@ -44,10 +44,8 @@
                 }
             }
             for (const item of dataTransfer.files) {
-                console.log(item)
-                if (item.type.startsWith("image/") || item.type.startsWith("video/")) {
-                    upload(item.arrayBuffer(), item.type);
-                }
+                console.log("Uploading file: ", item);
+                upload(item.arrayBuffer(), item.type);
             }
         }
 
@@ -76,11 +74,6 @@
             document.getElementById("dropzone").style.backgroundColor = "lightgreen";
             for (const item of allowdropevent.dataTransfer.items) {
                 console.log("items", item, item.kind, item.type);
-                if (item.type.length > 0 && !item.type.startsWith("image/") && !item.type.startsWith("video/")) {
-                    document.querySelector("#dropzone span#msg").innerText = item.type + " not supported"
-                    document.getElementById("dropzone").style.backgroundColor = "lightcoral";
-                    break;
-                }
             }
             for (const item of allowdropevent.dataTransfer.files) {
                 console.log("files", item)
@@ -105,22 +98,24 @@
             elem.appendChild(li);
             li.innerHTML = "Uploading............... " + contentType;
 
-            const resp = await fetch("/", {
+            const resp = await fetch("/?resp=json", {
                 "method": "POST",
                 "body": await data,
                 "headers": {
                     "Content-Type": contentType
                 }
             });
-            const result = new URL(await resp.text());
+            const resp_json = await resp.json();
+            const result = new URL(resp_json.encoded);
             console.log(result);
 
             const link = document.createElement("a");
             link.href = result.pathname;
-            link.innerText = result.pathname.substring(1) + " " + contentType;
+            link.innerText = result.pathname.substring(1)
             link.target = "_blank";
             li.innerHTML = "";
             li.appendChild(link);
+            li.append(resp_json.contentType);
         }
 
         document.addEventListener("paste", (event) => {
