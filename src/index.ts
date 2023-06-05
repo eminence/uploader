@@ -131,7 +131,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		// try to guess the type
 		tee = slowTee(value, ["hasher", "uploader", "guesser"]);
 		initSync(wasm_mod);
-		const rc = await infer(tee["guesser"]);
+		const rc = await infer(tee.guesser);
 		if (rc != null) {
 			contentType = rc;
 			console.log("Detected content type:", contentType);
@@ -143,13 +143,13 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		tee = slowTee(value, ["hasher", "uploader",]);
 	}
 
-	tee["hasher"].pipeTo(digestStream);
+	tee.hasher.pipeTo(digestStream);
 
 	let stored_in_kv: boolean;
 
 	// if small enough, store directly in KV
 	if (length < 20 * 1024 * 1024) {
-		await env.kv_upload.put(uuid, tee["uploader"], {
+		await env.kv_upload.put(uuid, tee.uploader, {
 			expirationTtl: calc_expiration_secsfromnow(length),
 			metadata: {
 				"blob": true,
@@ -160,7 +160,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		stored_in_kv = true;
 	} else {
 		// upload to R2
-		const put_obj = await env.r2_uploads.put(uuid, tee["uploader"], {
+		const put_obj = await env.r2_uploads.put(uuid, tee.uploader, {
 			// md5: hash,
 			httpMetadata: {
 				contentType: contentType,
