@@ -127,7 +127,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 
 
 	let tee;
-	if (contentType === null || contentType === "") {
+	if (contentType == null || contentType === "") {
 		// try to guess the type
 		tee = slowTee(value, ["hasher", "uploader", "guesser"]);
 		initSync(wasm_mod);
