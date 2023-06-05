@@ -278,12 +278,6 @@ export default {
 			}
 
 		} else if (request.method == "GET") {
-			if (url.pathname === "/wasm") {
-				initSync(wasm_mod);
-				const rc = add(4, 8);
-				console.log(rc);
-				return new Response("go away", { status: 400 });
-			}
 			if (url.pathname === "/favicon.ico") {
 				const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>("cecd07db-d608-49da-88a7-a88773a64930", { type: "stream" });
 				if (value === null) {

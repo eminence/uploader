@@ -17,11 +17,6 @@ macro_rules! console_log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
 }
 
-#[wasm_bindgen]
-pub fn add(left: usize, right: usize) -> usize {
-    console_log!("hello from add in rust");
-    left + right
-}
 
 #[wasm_bindgen]
 pub async fn infer(stream: web_sys::ReadableStream) -> Result<JsValue, JsValue> {
@@ -42,16 +37,5 @@ pub async fn infer(stream: web_sys::ReadableStream) -> Result<JsValue, JsValue> 
         Ok(infer_type.mime_type().to_string().into())
     } else {
         Ok(JsValue::NULL)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
     }
 }
