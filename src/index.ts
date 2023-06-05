@@ -279,7 +279,7 @@ export default {
 
 		} else if (request.method == "GET") {
 			if (url.pathname === "/favicon.ico") {
-				const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>("cecd07db-d608-49da-88a7-a88773a64930", { type: "stream" });
+				const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>("c81a6a23-46e9-42f4-a428-8167a09c79a5", { type: "stream" });
 				if (value === null) {
 					return new Response("not found in kv", { status: 404 });
 				}
