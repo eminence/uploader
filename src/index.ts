@@ -386,6 +386,11 @@ export default {
 					if (alias_row.blob == "kv") {
 						const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>(alias_row.uuid, { type: "stream" });
 						if (value === null) {
+							// if this content has expired, delete it from the db
+							if (alias_row.expires < Date.now()) {
+								await env.DB.prepare('DELETE FROM aliases WHERE uuid = ?1').bind(alias_row.uuid).run();
+								console.log("deleted expired alias", alias_row.uuid);
+							}
 							return new Response("not found in kv", { status: 404 });
 						}
 						return stream_kv_blob(value, metadata);
