@@ -88,6 +88,7 @@ interface AliasDbRow {
 	created: number;
 	expires: number;
 	cf: string;
+	contentType: string | null
 
 }
 
@@ -185,8 +186,8 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		const prefix = encoded.substring(0, i);
 		// try to insert the prefix, and if it fails, retry with a longer prefix
 		try {
-			const stmt = await env.DB.prepare('INSERT OR FAIL INTO aliases (alias, uuid, blob, created, expires, cf) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf)).run();
+			const stmt = await env.DB.prepare('INSERT OR FAIL INTO aliases (alias, uuid, blob, created, expires, cf, contentType) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf), contentType).run();
 			return { encoded: prefix, contentType: contentType };
 		} catch (e) {
 			console.log("error inserting alias", prefix, "trying again with a longer prefix", e);
@@ -320,7 +321,7 @@ export default {
 						return new Response("go away", { status: 400 });
 					}
 
-					const stmt = await env.DB.prepare(`SELECT alias, uuid, blob, created, expires, cf FROM aliases order by created desc limit ${limit} offset ${offset}`).run();
+					const stmt = await env.DB.prepare(`SELECT alias, uuid, blob, created, expires, cf, contentType FROM aliases order by created desc limit ${limit} offset ${offset}`).run();
 					if (stmt.success && stmt.results) {
 						const to_return = [] as any[];
 						for (const result of stmt.results as AliasDbRow[]) {
@@ -337,12 +338,22 @@ export default {
 							if (result.blob == "kv") {
 								const kv_data = await env.kv_upload.list({ prefix: result.uuid });
 								if (kv_data.keys.length == 1) {
+									const kv_md = kv_data.keys[0] as any;
 									o['kv_metadata'] = {
 										expires: new Date((kv_data.keys[0] as any).expiration * 1000).toISOString(),
-										metadata: kv_data.keys[0].metadata,
+										metadata: kv_md.metadata,
 									};
-								}
 
+									// if the sql DB has a null/empty content-type, see if we have that data from KV:
+									if (result.contentType == null || result.contentType == "") {
+										if (kv_md.metadata['content-type']) {
+											// update db:
+											const stmt = await env.DB.prepare('UPDATE aliases SET contentType = ?1 WHERE uuid = ?2').bind(kv_md.metadata['content-type'], result.uuid).run();
+											console.log(stmt);
+
+										}
+									}
+								}
 							} else if (result.blob == "r2") {
 								const r2_data = await env.r2_uploads.list({
 									prefix: result.uuid,
@@ -380,10 +391,26 @@ export default {
 			if (url.pathname.length > 1) {
 
 				// look up alias in D1 database
-				const stmt = await env.DB.prepare('SELECT alias, uuid, blob, created, expires, cf FROM aliases WHERE alias = ?1').bind(url.pathname.substring(1)).run();
+				const stmt = await env.DB.prepare('SELECT alias, uuid, blob, created, expires, cf, contentType FROM aliases WHERE alias = ?1').bind(url.pathname.substring(1)).run();
 				if (stmt.success && stmt.results && stmt.results.length > 0) {
 					const alias_row = stmt.results[0] as AliasDbRow;
 					if (alias_row.blob == "kv") {
+						// if this content-type is "text/uri-list", then fetch the data as text and respond
+						// with a 302 Found and a Location: header
+						if (alias_row.contentType == "text/uri-list") {
+							const { value } = await env.kv_upload.getWithMetadata<KVMetadata>(alias_row.uuid, { type: "text" });
+							if (value === null) {
+								return new Response("not found in kv", { status: 404 });
+							}
+							return new Response(value, {
+								status: 302,
+								headers: {
+									"location": value,
+									"content-type": "text/uri-list",
+								},
+							});
+						}
+
 						const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>(alias_row.uuid, { type: "stream" });
 						if (value === null) {
 							// if this content has expired, delete it from the db
@@ -436,4 +463,5 @@ export default {
 			}
 		});
 	},
+
 };
