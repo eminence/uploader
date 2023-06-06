@@ -9,7 +9,7 @@
             font-size: larger;
         }
 
-        #expired {
+        .expired {
             color: red;
         }
     </style>
@@ -41,7 +41,7 @@
 
                 td = tr.appendChild(document.createElement("td"));
                 td.append(elem.expires);
-                if (new Date(elem.created_ts) > now) {
+                if (new Date(elem.expires) < now) {
                     td.classList.add("expired");
                 }
 
