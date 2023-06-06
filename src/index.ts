@@ -35,6 +35,7 @@ export interface Env {
 	ADMIN_PASSWORD: string;
 
 	LOCAL_DEV?: string;
+	EMAIL_FORWARD: string;
 }
 
 const base58_encode = (arraybuffer: ArrayBuffer): string => {
@@ -465,6 +466,11 @@ export default {
 				"content-type": "text/html; charset=utf-8",
 			}
 		});
+	},
+
+
+	async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
+		await message.forward(env.EMAIL_FORWARD);
 	},
 
 };
