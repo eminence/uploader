@@ -9,6 +9,16 @@
             font-size: larger;
         }
 
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        table td {
+            border: 1px solid gray;
+        }
+        tr:hover {background-color: lightcyan;}
+
+
         .expired {
             color: red;
         }
@@ -17,6 +27,7 @@
         let offset = 0;
 
         async function load_data() {
+            document.getElementById("load_button").innerText = "Loading...";
             const now = new Date();
 
             const table = document.getElementById("table");
@@ -59,7 +70,7 @@
                 }
             }
             offset += limit;
-
+            document.getElementById("load_button").innerText = "More";
         }
     </script>
 </head>
@@ -67,7 +78,7 @@
 <body>
 
     <table id="table"></table>
-    <button onclick="load_data()">Load more</button>
+    <button id="load_button" onclick="load_data()">Load more</button>
 
     <script type="module">
         load_data();
