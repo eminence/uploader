@@ -113,7 +113,10 @@ const stream_kv_blob = (value: ReadableStream | null, metadata: KVMetadata | nul
 	return new Response("error", { status: 500 });
 };
 
-const calc_expiration_secsfromnow = (file_size: number): number => {
+const calc_expiration_secsfromnow = (env: Env, file_size: number): number => {
+	if (env.LOCAL_DEV === "true") {
+		return 1 * 86400; // content uploaded during local testing expires in 1 day
+	}
 	const min_age = 30; // 30 days
 	const max_age = 365; // 1 year
 	const max_size = 100 * 1024 * 1024; // 100 Mb limit from CF
@@ -151,7 +154,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 	// if small enough, store directly in KV
 	if (length < 20 * 1024 * 1024) {
 		await env.kv_upload.put(uuid, tee.uploader, {
-			expirationTtl: calc_expiration_secsfromnow(length),
+			expirationTtl: calc_expiration_secsfromnow(env, length),
 			metadata: {
 				"blob": true,
 				"content-type": contentType,
@@ -178,7 +181,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 	console.log("calculated digest", hexString, encoded, uuid);
 
 	const now = Date.now().valueOf();
-	const expires_sec = calc_expiration_secsfromnow(length);
+	const expires_sec = calc_expiration_secsfromnow(env, length);
 
 	// find the shortest prefix of `encoded` that's not already in our alias database
 	let db_error;
@@ -289,7 +292,7 @@ export default {
 			}
 			if (url.pathname.startsWith("/_/")) {
 				if (cf && (cf as any).metroCode === "521" && headers.get("Authorization") === "Basic " + env.ADMIN_PASSWORD) {
-					console.log("login ok from", JSON.stringify(cf));
+					// console.log("login ok from", JSON.stringify(cf));
 				} else {
 					return new Response("not found", {
 						status: 401,
