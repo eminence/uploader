@@ -13,14 +13,23 @@
             border-collapse: collapse;
             width: 100%;
         }
+
         table td {
             border: 1px solid gray;
         }
-        tr:hover {background-color: lightcyan;}
+
+        tr:hover {
+            background-color: lightcyan;
+        }
 
 
         .expired {
             color: red;
+            font-weight: bold;
+        }
+
+        .expiring {
+            color: darkorange
         }
     </style>
     <script type="text/javascript">
@@ -52,8 +61,11 @@
 
                 td = tr.appendChild(document.createElement("td"));
                 td.append(elem.expires);
+                // expiring within 7 days?
                 if (new Date(elem.expires) < now) {
                     td.classList.add("expired");
+                } else if (new Date(elem.expires_ts - (7 * 24 * 60 * 60 * 1000)) < now) {
+                    td.classList.add("expiring");
                 }
 
                 td = tr.appendChild(document.createElement("td"));
