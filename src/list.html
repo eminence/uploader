@@ -41,9 +41,10 @@
 
             const table = document.getElementById("table");
 
-            const limit = 25;
-
-            const resp = await fetch(`/_/list.json?limit=${limit}&offset=${offset}`);
+            const limit = 15;
+            const url = `/_/list.json?limit=${limit}&offset=${offset}`;
+            offset += limit;
+            const resp = await fetch(url);
             const data = await resp.json();
 
 
@@ -71,17 +72,18 @@
                 td = tr.appendChild(document.createElement("td"));
                 td.append(elem.cf.city + ", " + elem.cf.country);
 
+                td = tr.appendChild(document.createElement("td"));
+                td.append(elem.contentType);
+
                 tr.appendChild(document.createElement("td")).append(elem.blob);
                 if (elem.blob === "kv" && elem.kv_metadata) {
                     td = tr.appendChild(document.createElement("td"));
-                    td.append(elem.kv_metadata.metadata["content-type"] + " -- " + elem.kv_metadata.metadata["content-length"] + " bytes");
-
+                    td.append(elem.kv_metadata.metadata["content-length"] + " bytes");
                 } else if (elem.blob == "r2") {
                     td = tr.appendChild(document.createElement("td"));
                     td.append(elem.r2_metadata.size + " bytes");
                 }
             }
-            offset += limit;
             document.getElementById("load_button").innerText = "More";
         }
     </script>

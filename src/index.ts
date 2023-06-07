@@ -339,6 +339,7 @@ export default {
 								expires: new Date(result.expires).toISOString(),
 								expires_ts: result.expires,
 								cf: JSON.parse(result.cf),
+								contentType: result.contentType,
 							} as any;
 							if (result.blob == "kv") {
 								const kv_data = await env.kv_upload.list({ prefix: result.uuid });
