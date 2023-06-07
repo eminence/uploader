@@ -279,6 +279,7 @@ export default {
 					}
 				} catch (e) {
 					console.log(e);
+					return new Response("Error saving file", { status: 500 });
 				}
 			}
 

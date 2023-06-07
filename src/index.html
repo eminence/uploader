@@ -105,6 +105,10 @@
                     "Content-Type": contentType
                 }
             });
+            if (!resp.ok) {
+                li.innerHTML = "error";
+                return;
+            }
             const resp_json = await resp.json();
             const result = new URL(resp_json.encoded);
             console.log(result);
