@@ -401,6 +401,17 @@ export default {
 				const stmt = await env.DB.prepare('SELECT alias, uuid, blob, created, expires, cf, contentType FROM aliases WHERE alias = ?1').bind(url.pathname.substring(1)).run();
 				if (stmt.success && stmt.results && stmt.results.length > 0) {
 					const alias_row = stmt.results[0] as AliasDbRow;
+					if (alias_row.expires < Date.now()) {
+						if (alias_row.blob == "r2") {
+							await env.r2_uploads.delete(alias_row.uuid);
+						} else if (alias_row.blob == "kv") {
+							await env.kv_upload.delete(alias_row.uuid);
+						}
+						// note: we don't have to delete from KV because those entries expire via TTL
+						// but we'll do it anyway
+						await env.DB.prepare('DELETE FROM aliases WHERE uuid = ?1').bind(alias_row.uuid).run();
+						console.log("deleted expired alias", alias_row.uuid);
+					}
 					if (alias_row.blob == "kv") {
 						// if this content-type is "text/uri-list", then fetch the data as text and respond
 						// with a 302 Found and a Location: header
@@ -420,11 +431,6 @@ export default {
 
 						const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>(alias_row.uuid, { type: "stream" });
 						if (value === null) {
-							// if this content has expired, delete it from the db
-							if (alias_row.expires < Date.now()) {
-								await env.DB.prepare('DELETE FROM aliases WHERE uuid = ?1').bind(alias_row.uuid).run();
-								console.log("deleted expired alias", alias_row.uuid);
-							}
 							return new Response("not found in kv", { status: 404 });
 						}
 						return stream_kv_blob(value, metadata);
@@ -446,7 +452,7 @@ export default {
 					// alias might be KV, look here
 					const { value, metadata } = await env.kv_upload.getWithMetadata<KVMetadata>(url.pathname.substring(1), { type: "stream" });
 					if (value === null) {
-						return new Response("not found in kv", { status: 404 });
+						return new Response("not found in d1/kv", { status: 404 });
 					}
 					if (metadata?.blob) {
 						return stream_kv_blob(value, metadata);
