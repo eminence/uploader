@@ -126,7 +126,7 @@ const calc_expiration_secsfromnow = (env: Env, file_size: number): number => {
 	return ttl_in_days * 86400;
 }
 
-const save_stream = async (env: Env, value: ReadableStream, length: number, contentType?: string, contentLength?: number, cf?: any): Promise<{ encoded: string, contentType?: string }> => {
+const save_stream = async (env: Env, value: ReadableStream, contentLength: number, contentType?: string, cf?: any): Promise<{ encoded: string, contentType?: string }> => {
 	const digestStream = new crypto.DigestStream("SHA-256");
 	const uuid = crypto.randomUUID();
 
@@ -138,7 +138,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		initSync(wasm_mod);
 		const rc = await infer(tee.guesser);
 		if (rc != null) {
-			contentType = rc;
+			contentType = rc as string;
 			console.log("Detected content type:", contentType);
 		} else {
 			console.log("Failed to detect content type, using application/octet-stream");
@@ -153,9 +153,10 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 	let stored_in_kv: boolean;
 
 	// if small enough, store directly in KV
-	if (length < 20 * 1024 * 1024) {
+	const expirationTtl = calc_expiration_secsfromnow(env, contentLength);
+	if (contentLength < 20 * 1024 * 1024) {
 		await env.kv_upload.put(uuid, tee.uploader, {
-			expirationTtl: calc_expiration_secsfromnow(env, length),
+			expirationTtl,
 			metadata: {
 				"blob": true,
 				"content-type": contentType,
@@ -165,7 +166,8 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		stored_in_kv = true;
 	} else {
 		// upload to R2
-		const put_obj = await env.r2_uploads.put(uuid, tee.uploader, {
+		let reader = tee.uploader.pipeThrough(new FixedLengthStream(contentLength));
+		const put_obj = await env.r2_uploads.put(uuid, reader, {
 			// md5: hash,
 			httpMetadata: {
 				contentType: contentType,
@@ -182,7 +184,6 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 	console.log("calculated digest", hexString, encoded, uuid);
 
 	const now = Date.now().valueOf();
-	const expires_sec = calc_expiration_secsfromnow(env, length);
 
 	// find the shortest prefix of `encoded` that's not already in our alias database
 	let db_error;
@@ -191,7 +192,7 @@ const save_stream = async (env: Env, value: ReadableStream, length: number, cont
 		// try to insert the prefix, and if it fails, retry with a longer prefix
 		try {
 			const stmt = await env.DB.prepare('INSERT OR FAIL INTO aliases (alias, uuid, blob, created, expires, cf, contentType) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
-				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expires_sec * 1000), JSON.stringify(cf), contentType).run();
+				.bind(prefix, uuid, stored_in_kv ? "kv" : "r2", now, now + (expirationTtl * 1000), JSON.stringify(cf), contentType).run();
 			return { encoded: prefix, contentType: contentType };
 		} catch (e) {
 			console.log("error inserting alias", prefix, "trying again with a longer prefix", e);
@@ -252,7 +253,7 @@ export default {
 					return new Response("go away", { status: 400 });
 				}
 
-				const { encoded, contentType } = await save_stream(env, file.stream(), file.size, undefined, file.size, request.cf);
+				const { encoded, contentType } = await save_stream(env, file.stream(), file.size, undefined, request.cf);
 				if (url.searchParams.get("resp") === "json") {
 					return new Response(JSON.stringify({ encoded: `https://up.em32.site/${encoded}`, contentType }), {
 						headers: {
@@ -264,7 +265,7 @@ export default {
 				}
 			} else {
 				try {
-					const { encoded, contentType: detectedType } = await save_stream(env, request.body, contentLength, contentType, contentLength, request.cf);
+					const { encoded, contentType: detectedType } = await save_stream(env, request.body, contentLength, contentType, request.cf);
 					if (url.searchParams.get("resp") === "json") {
 						return new Response(JSON.stringify({
 							encoded: `https://up.em32.site/${encoded}`,
